@@ -1,0 +1,21 @@
+{
+  "name": "wa.ado",
+  "version": "1.0.0",
+  "description": "---------------------------------\r whatsapp client for ado ecosystem\r ---------------------------------",
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "tsc && node dist/main.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/0zl/wa.ado.git"
+  },
+  "keywords": ["whatsapp", "client", "ado"],
+  "author": "0zl <zwiefk0@gmail.com>",
+  "license": "GPL-3.0",
+  "bugs": {
+    "url": "https://github.com/0zl/wa.ado/issues"
+  },
+  "homepage": "https://github.com/0zl/wa.ado#readme"
+}
