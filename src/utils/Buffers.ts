@@ -8,7 +8,7 @@ export default {
             return Buffer.from(JSON.stringify(data), 'utf8')
     },
 
-    bufferToData: (buffer: Buffer): any => {
+    bufferToData: (buffer: Buffer | any): any => {
         if ( buffer.length === 0 ) return null
 
         if ( buffer[0] === 0 )
