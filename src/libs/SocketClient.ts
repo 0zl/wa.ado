@@ -7,6 +7,7 @@ export default class SocketClient extends EventEmitter {
     private Socket: ws | null
     private SocketName: string | null
     private SubType: number | null
+    private IsReconnecting: boolean = false
 
     constructor(SocketName: string, SubscribeType: number) {
         super()
@@ -33,13 +34,51 @@ export default class SocketClient extends EventEmitter {
         }
     }
 
-    public async Connect(): Promise<Boolean> {
+    private async Reconnect(): Promise<boolean> {
+        let connected = false
+        let count = 0
+        
+        return new Promise(async resolve => {
+            while ( !connected ) {
+                try {
+                    await new Promise(resolve => setTimeout(resolve, 1000))
+                    
+                    this.IsReconnecting = false
+                    connected = await this.Connect()
+                    
+                    console.clear()
+                    console.log('reconnected.')
+                    
+                    if ( connected ) resolve(true)
+                } catch (e) {
+                    count++
+                    if ( count > 10 ) throw new Error('SocketClient: Failed to reconnect to server')
+    
+                    console.log('failed to reconnect, retrying..')
+                }
+            }
+        })
+    }
+
+    public async Connect(): Promise<boolean> {
         if ( !this.SERVERIP ) throw new Error('SERVERIP is not defined')
 
         try {
             this.Socket = new ws(`ws://${this.SERVERIP}`, { perMessageDeflate: false })
 
             this.Socket.on('open', () => this.Send(1, this.SubType))
+
+            this.Socket.on('close', async () => {
+                console.log('server closed, retrying..')
+
+                this.IsReconnecting = true
+                await this.Reconnect()
+            })
+
+            this.Socket.on('error', (e: Error) => {
+                console.log(e)
+            })
+
             this.Socket.on('message', payload => {
                 let [ sub ] = Buffers.bufferToData(payload)
 
@@ -57,6 +96,10 @@ export default class SocketClient extends EventEmitter {
                 }
             })
         } catch (err) {
+            if ( this.IsReconnecting ) {
+                return await this.Reconnect()
+            }
+
             console.error(err)
             throw new Error('SocketClient: Failed to connect to server')
         }

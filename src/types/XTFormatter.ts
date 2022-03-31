@@ -1,4 +1,4 @@
-export default interface XTFormatter {
+export interface XTMessages {
     ts: number
     authorId: string
     threadId: string
@@ -15,5 +15,6 @@ export default interface XTFormatter {
             };
             raw: any
         } | null
-    }
+    } | null,
+    raw: any
 }

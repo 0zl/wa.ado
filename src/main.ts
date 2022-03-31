@@ -1,19 +1,25 @@
 import qr from 'qr-image'
 import dotenv from 'dotenv'
 import Express from 'express'
+import Buffers from './utils/Buffers'
 import { existsSync, mkdirSync } from 'fs'
 import SocketClient from './libs/SocketClient'
 import logger from '@adiwajshing/baileys/lib/Utils/logger'
 import makeWASocket, { DisconnectReason, fetchLatestBaileysVersion, makeInMemoryStore, useSingleFileAuthState } from '@adiwajshing/baileys'
 
+import { XTMessages } from './types/XTFormatter'
+import PacketsPayload from './types/PacketsPayload'
+
 dotenv && dotenv.config()
 
 class AdoWhatsApp extends SocketClient {
-    private XT: number = 1
     private Client: any
     private closedCount: number = 0
     private dataStore: any
     private stateData: any
+
+    public XT: number = 1
+    public ClientID: number = ~~(Math.random() * 100000)
 
     public QRCode: string | null = null
     public APIPort: number = process.env.APIPORT ? +process.env.APIPORT : 3000
@@ -82,9 +88,68 @@ class AdoWhatsApp extends SocketClient {
             })
 
             this.Client.ev.on('creds.update', this.stateData.saveState)
+            await this.InitializeEvents()
         }
 
         ConnectWhatsapp()
+    }
+
+    private async InitializeEvents() {
+        if ( !this.Client?.ev ) return
+
+        this.Client?.ev.on('messages.upsert', async (raw: any) => {
+            let msg = raw.messages ? raw.messages[0] : null
+            if ( !msg ) return
+
+            const AttachmentPrefabs = (obj: string) => {
+                return {
+                    mime: msg.message[obj].mime,
+                    size: msg.message[obj].size,
+                    meta: {
+                        width: msg.message[obj].width,
+                        height: msg.message[obj].height,
+                        url: msg.message[obj].url
+                    },
+                    raw: msg.message[obj].raw
+                }
+            }
+
+            const MessageFormat = (): XTMessages => {
+                return {
+                    ts: Date.now(),
+                    authorId: msg.key.participiant || msg.key.remoteJid,
+                    threadId: msg.key.remoteJid,
+                    messages: msg.message ? {
+                        text: msg.message.conversation || null,
+                        attachment: msg.message.imageMessage ? {
+                            type: 'image',
+                            ...AttachmentPrefabs('imageMessage')
+                        } : msg.message.videoMessage ? {
+                            type: 'video',
+                            ...AttachmentPrefabs('videoMessage')
+                        } : msg.message.stickerMessage ? {
+                            type: 'sticker',
+                            ...AttachmentPrefabs('stickerMessage')
+                        } : null
+                    } : null,
+                    raw: raw
+                }
+            }
+
+            const SendPacket = (event: string, data: any) => {
+                const DataHeaders = { xt: this.XT, id: this.ClientID }
+                const DataSockets = { ...DataHeaders, event }
+
+                this.Send(2, [ DataSockets, data ])
+            }
+
+            switch (raw.type) {
+                case 'notify':
+                    return SendPacket('message', MessageFormat())
+                default:
+                    return
+            }
+        })
     }
 
     public async Initializer() {
@@ -92,6 +157,17 @@ class AdoWhatsApp extends SocketClient {
 
         this.Log('initializing whatsapp client..')
         this.InitializeConnection()
+    }
+
+    public Methods = {
+        SendMessage: async (data: any) => {
+            let [ threadId, message, reply, raw ] = data
+            const quoteMessage = await this.dataStore.loadMessage(threadId, raw.messages[0].key.id)
+
+            return await this.Client.sendMessage(threadId, { text: message }, {
+                quoted: reply ? quoteMessage : undefined
+            })
+        }
     }
 }
 
@@ -102,6 +178,19 @@ const MainEntry = async () => {
     
     const WhatsApp = new AdoWhatsApp()
     await WhatsApp.Initializer()
+
+    WhatsApp.on('message', async (raw: Buffer) => {
+        const payload = Buffers.bufferToData(raw)
+
+        const [type, packets] = payload // unsued type, but it's there. (for now)
+        const [soc, methods, data] = packets
+        
+        //@ts-ignore
+        if ( WhatsApp.XT === soc.xt && WhatsApp.ClientID === soc.id && WhatsApp.Methods[methods] ) {
+            //@ts-ignore
+            await WhatsApp.Methods[methods](data)
+        }
+    })
 
     Express()
         .get('/qr', async (_, res) => {
