@@ -66,7 +66,7 @@ export default class SocketClient extends EventEmitter {
         try {
             this.Socket = new ws(`ws://${this.SERVERIP}`, { perMessageDeflate: false })
 
-            this.Socket.on('open', () => this.Send(1, this.SubType))
+            this.Socket.on('open', () => this.Send(1, this.SocketName))
 
             this.Socket.on('close', async () => {
                 console.log('server closed, retrying..')

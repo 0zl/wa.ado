@@ -242,7 +242,7 @@ const MainEntry = async () => {
         const [soc, methods, data] = packets
         
         //@ts-ignore
-        if ( WhatsApp.XT === soc.xt && WhatsApp.ClientID === soc.id && WhatsApp.Methods[methods] ) {
+        if ( WhatsApp.XT === soc.xt && WhatsApp.Methods[methods] ) {
             //@ts-ignore
             await WhatsApp.Methods[methods](data)
         }
