@@ -8,17 +8,16 @@ import logger from '@adiwajshing/baileys/lib/Utils/logger'
 import makeWASocket, { DisconnectReason, fetchLatestBaileysVersion, makeInMemoryStore, useSingleFileAuthState } from '@adiwajshing/baileys'
 
 import { XTMessages } from './types/XTFormatter'
-import PacketsPayload from './types/PacketsPayload'
 
 dotenv && dotenv.config()
 
 class AdoWhatsApp extends SocketClient {
-    private Client: any
     private closedCount: number = 0
     private dataStore: any
     private stateData: any
 
     public XT: number = 1
+    public Client: any
     public ClientID: number = ~~(Math.random() * 100000)
 
     public QRCode: string | null = null
@@ -97,6 +96,13 @@ class AdoWhatsApp extends SocketClient {
     private async InitializeEvents() {
         if ( !this.Client?.ev ) return
 
+        const SendPacket = (event: string, data: any) => {
+            const DataHeaders = { xt: this.XT, id: this.ClientID }
+            const DataSockets = { ...DataHeaders, event }
+
+            this.Send(2, [ DataSockets, data ])
+        }
+
         this.Client?.ev.on('messages.upsert', async (raw: any) => {
             let msg = raw.messages ? raw.messages[0] : null
             if ( !msg ) return
@@ -136,16 +142,26 @@ class AdoWhatsApp extends SocketClient {
                 }
             }
 
-            const SendPacket = (event: string, data: any) => {
-                const DataHeaders = { xt: this.XT, id: this.ClientID }
-                const DataSockets = { ...DataHeaders, event }
-
-                this.Send(2, [ DataSockets, data ])
-            }
-
             switch (raw.type) {
                 case 'notify':
                     return SendPacket('message', MessageFormat())
+                default:
+                    return
+            }
+        })
+
+        this.Client?.ev.on('group-participants.update', async (raw: any) => {
+            let { id, participants, action } = raw
+
+            switch (action) {
+                case 'add':
+                    return SendPacket('threadMemberAdd', {
+                        threadId: id, members: participants, raw: raw
+                    })
+                case 'remove':
+                    return SendPacket('threadMemberLeft', {
+                        threadId: id, members: participants, raw: raw
+                    })
                 default:
                     return
             }
@@ -159,14 +175,54 @@ class AdoWhatsApp extends SocketClient {
         this.InitializeConnection()
     }
 
+    private async getMessage(threadId: string, raw: any) {
+        return await this.dataStore.loadMessage(threadId, raw.messages[0].key.id)
+    }
+
     public Methods = {
         SendMessage: async (data: any) => {
             let [ threadId, message, reply, raw ] = data
-            const quoteMessage = await this.dataStore.loadMessage(threadId, raw.messages[0].key.id)
 
             return await this.Client.sendMessage(threadId, { text: message }, {
-                quoted: reply ? quoteMessage : undefined
+                quoted: reply ? await this.getMessage(threadId, raw) : undefined
             })
+        },
+
+        SendImage: async (data: any) => {
+            let [ threadId, path, raw, reply ] = data
+
+            return await this.Client.sendMessage(threadId, {
+                image: { url: path },
+                mimetype: 'image/png'
+            }, {
+                quoted: reply ? await this.getMessage(threadId, raw) : undefined
+            })
+        },
+
+        SendAudio: async (data: any) => {
+            let [ threadId, path, raw, reply ] = data
+
+            return await this.Client.sendMessage(threadId, {
+                audio: { url: path },
+                ptt: true, mimetype: 'audio/mp4'
+            }, {
+                quoted: reply ? await this.getMessage(threadId, raw) : undefined
+            })
+        },
+
+        SendSticker: async (data: any) => {
+            let [ threadId, path, raw, reply ] = data
+
+            return await this.Client.sendMessage(threadId, {
+                sticker: { url: path }, mimetype: 'image/webp'
+            }, {
+                quoted: reply ? await this.getMessage(threadId, raw) : undefined
+            })
+        },
+
+        ReadThread: async (data: any) => {
+            // TODO: implement
+            return false
         }
     }
 }
@@ -200,6 +256,26 @@ const MainEntry = async () => {
                     .send(qr.imageSync(WhatsApp.QRCode, { type: 'png' }))
 
             res.redirect('/')
+        })
+        .get('/api', async (req, res) => {
+            let { method, data, key } = req.query
+
+            if ( !method || !data || !key ) return res.json({ success: false, data: 'missing method or data or api key' })
+            if ( key !== process.env.APIKEY ) return res.json({ success: false, data: 'invalid api key' })
+
+            method = String(method)
+            data = String(data).split(',')
+            
+            try {
+                let blacklistPublicMethods = ['ev']
+                if ( blacklistPublicMethods.includes(method) ) return res.json({ success: false, data: 'method not allowed' })
+
+                //@ts-ignore
+                let raw = await WhatsApp[method](...data)
+                res.json({ success: true, data: raw })
+            } catch (err) {
+                res.json({ success: false, data: err })
+            }
         })
         .all('*', (_, res) => res.end('wa.ado - ado project - shiro.eu.org'))
         .listen(WhatsApp.APIPort, () => WhatsApp.Log(`whatsapp api listening on port ${WhatsApp.APIPort}`))
