@@ -34,7 +34,6 @@
     "dotenv": "^16.0.0",
     "express": "^4.17.3",
     "qr-image": "^3.2.0",
-    "reconnecting-websocket": "^4.4.0",
     "ws": "^8.5.0"
   }
 }
