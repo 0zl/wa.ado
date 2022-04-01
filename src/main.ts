@@ -116,7 +116,7 @@ class AdoWhatsApp extends SocketClient {
                         height: msg.message[obj].height,
                         url: msg.message[obj].url
                     },
-                    raw: msg.message[obj].raw
+                    raw: msg.message[obj]
                 }
             }
 
