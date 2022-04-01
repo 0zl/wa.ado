@@ -117,7 +117,7 @@ class AdoWhatsApp extends SocketClient {
             const MessageFormat = (): XTMessages => {
                 return {
                     ts: Date.now(),
-                    authorId: msg.key.participiant || msg.key.remoteJid,
+                    authorId: msg.key.participant || msg.key.remoteJid,
                     threadId: msg.key.remoteJid,
                     messages: msg.message ? {
                         text: msg.message.conversation || null,
