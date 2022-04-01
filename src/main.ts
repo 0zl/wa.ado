@@ -12,7 +12,6 @@ import { XTMessages } from './types/XTFormatter'
 dotenv && dotenv.config()
 
 class AdoWhatsApp extends SocketClient {
-    private closedCount: number = 0
     private dataStore: any
     private stateData: any
 
@@ -36,12 +35,11 @@ class AdoWhatsApp extends SocketClient {
         this.dataStore.readFromFile('./session/store.json')
         setInterval(() => this.dataStore.writeToFile('./session/store.json'), 10_000)
 
+        
+        const { version } = await fetchLatestBaileysVersion()
+        this.Log(`whatsapp web version: ${version.join('.')}`)
+
         const ConnectWhatsapp = async () => {
-            if ( this.Client ) this.Client.end()
-
-            const { version } = await fetchLatestBaileysVersion()
-            this.Log(`whatsapp web version: ${version.join('.')}`)
-
             this.Client = makeWASocket({
                 version,
                 printQRInTerminal: false,
@@ -54,35 +52,31 @@ class AdoWhatsApp extends SocketClient {
 
             this.dataStore.bind(this.Client.ev)
 
-            this.Client.ev.on('connection.update', (update: any) => {
+            this.Client.ev.on('connection.update', async (update: any) => {
                 const { connection, lastDisconnect, qr } = update
                 
-                if ( connection === 'close' ) {
-                    this.closedCount++
-
-                    if ( this.closedCount <= 5 ) {
-                        const shouldReconnect = lastDisconnect.error?.output?.statusCode !== DisconnectReason.loggedOut
-                        this.Log('connection closed reason:', lastDisconnect.error?.output?.payload.message || 'unknown') // why boom?
-
-                        if ( shouldReconnect ) {
-                            this.Log('reconnecting..')
-                            ConnectWhatsapp()
-                        }
-                    } else {
-                        this.Log('too many connection closes, stopping..')
-                        process.exit(1)
-                    }
+                if ( this.QRCode !== qr ) {
+                    this.QRCode = qr
+                    this.Log('new qr code generated.')
                 }
 
                 if ( connection === 'open' ) {
                     this.loggedIn = true
-                    this.closedCount = 0
                     this.Log('successfully connected to whatsapp.')
                 }
 
-                if ( this.QRCode !== qr ) {
-                    this.QRCode = qr
-                    this.Log('new qr code generated.')
+                if ( connection === 'close' ) {
+                    let shouldReconnect = lastDisconnect.error?.output?.statusCode !== DisconnectReason.loggedOut
+                    
+                    if ( shouldReconnect ) {
+                        this.Log('reconnecting to whatsapp..')
+
+                        await new Promise(resolve => setTimeout(resolve, 1_000))
+                        await ConnectWhatsapp()
+                    } else {
+                        this.Log('connection closed.')
+                        process.exit(1)
+                    }
                 }
             })
 
