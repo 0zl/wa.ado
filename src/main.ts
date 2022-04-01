@@ -61,8 +61,8 @@ class AdoWhatsApp extends SocketClient {
                     this.closedCount++
 
                     if ( this.closedCount <= 5 ) {
-                        const shouldReconnect = lastDisconnect.error.output.statusCode !== DisconnectReason.loggedOut
-                        this.Log('connection closed reason:', lastDisconnect.error.output.payload.message) // why boom?
+                        const shouldReconnect = lastDisconnect.error?.output?.statusCode !== DisconnectReason.loggedOut
+                        this.Log('connection closed reason:', lastDisconnect.error?.output?.payload.message || 'unknown') // why boom?
 
                         if ( shouldReconnect ) {
                             this.Log('reconnecting..')
