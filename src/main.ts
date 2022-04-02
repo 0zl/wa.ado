@@ -103,7 +103,7 @@ class AdoWhatsApp extends SocketClient {
 
             const AttachmentPrefabs = (obj: string) => {
                 return {
-                    mime: msg.message[obj].mime,
+                    mime: msg.message[obj].mimetype,
                     size: msg.message[obj].size,
                     meta: {
                         width: msg.message[obj].width,
